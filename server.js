@@ -1,6 +1,6 @@
 
 // Bu dosyanın adı: server.js
-// Render.com'a yüklenecek son hali. (Sağlık Kontrolü Eklendi)
+// Render.com'un "Zaman Aşımı" hatasını çözen son versiyon.
 
 const { Server } = require("socket.io");
 const http = require('http'); // Node.js'in kendi HTTP modülünü dahil et
@@ -20,8 +20,10 @@ const httpServer = http.createServer((req, res) => {
 
 // Render'ın bize verdiği portu (veya yerelde 3000'i) kullan
 const PORT = process.env.PORT || 3000;
+// 🔥 Render'ın istediği HOST adresi (Bu, zaman aşımını çözer)
+const HOST = process.env.HOST || '0.0.0.0';
 
-// 2. Socket.io'yu direkt porta DEĞİL, oluşturduğumuz HTTP sunucusuna bağla
+// 2. Socket.io'yu oluşturduğumuz HTTP sunucusuna bağla
 const io = new Server(httpServer, {
   cors: {
     origin: "*", // Test için herkes (Daha sonra sitenin adını yazarsın)
@@ -117,7 +119,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// 3. Sunucuyu normal io.listen() ile DEĞİL, httpServer.listen() ile başlat
-httpServer.listen(PORT, () => {
-  console.log(`Sunucu ${PORT} portunda başarıyla başlatıldı.`);
+// 3. 🔥 GÜNCELLENEN KISIM: Sunucuyu '0.0.0.0' hostu ile başlat
+httpServer.listen(PORT, HOST, () => {
+  console.log(`Sunucu ${PORT} portunda ${HOST} hostunda başarıyla başlatıldı.`);
 });
