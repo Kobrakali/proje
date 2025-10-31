@@ -1,25 +1,39 @@
 
 // Bu dosyanın adı: server.js
-// Render.com'a yüklenecek son hali.
+// Render.com'a yüklenecek son hali. (Sağlık Kontrolü Eklendi)
 
 const { Server } = require("socket.io");
+const http = require('http'); // Node.js'in kendi HTTP modülünü dahil et
 
-// Render.com portu kendisi ayarlar, 3000'e GEREK YOK.
-// process.env.PORT || 3000 -> Render için en doğru yöntem budur.
+// 1. Render'ın sağlık kontrolü (health check) için basit bir HTTP sunucusu oluştur
+const httpServer = http.createServer((req, res) => {
+  // Render "GET /" isteği attığında ona "OK" (200) cevabı ver
+  if (req.method === 'GET' && req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Arama santrali (WebSocket) sunucusu aktif.');
+  } else {
+    // Diğer tüm HTTP isteklerini reddet
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+// Render'ın bize verdiği portu (veya yerelde 3000'i) kullan
 const PORT = process.env.PORT || 3000;
 
-const io = new Server(PORT, {
+// 2. Socket.io'yu direkt porta DEĞİL, oluşturduğumuz HTTP sunucusuna bağla
+const io = new Server(httpServer, {
   cors: {
-    // ⚠️ DİKKAT: Burası en kritik yer.
-    // "*" -> Herkesin bağlanmasına izin verir. Test için en iyisi budur.
-    origin: "*", 
-    // Testten sonra buraya SADECE kendi sitenin adresini yazman güvenli olur:
-    // origin: "https://senin-sosyal-medyan.com", 
+    origin: "*", // Test için herkes (Daha sonra sitenin adını yazarsın)
     methods: ["GET", "POST"]
   }
 });
 
-console.log(`🚀 Hatasız Arama Sunucusu (Santral) ${PORT} portunda dinlemede...`);
+console.log(`🚀 Hatasız Arama Sunucusu (Santral) ${PORT} portunda dinlemeye hazır...`);
+
+// =========================================================
+// (Aşağıdaki tüm Socket.io mantığı öncekiyle BİREBİR AYNI)
+// =========================================================
 
 let kullaniciSoketleri = new Map(); // key: userId, value: socket.id
 
@@ -69,7 +83,7 @@ io.on("connection", (socket) => {
       });
     }
   });
-
+  
   // 5. GENEL WEBRTC SİNYAL İLETİMİ (call_room -> call_room)
   socket.on("send_signal", (data) => {
     const receiverSocketId = kullaniciSoketleri.get(data.receiver_id.toString());
@@ -101,4 +115,9 @@ io.on("connection", (socket) => {
       }
     }
   });
+});
+
+// 3. Sunucuyu normal io.listen() ile DEĞİL, httpServer.listen() ile başlat
+httpServer.listen(PORT, () => {
+  console.log(`Sunucu ${PORT} portunda başarıyla başlatıldı.`);
 });
