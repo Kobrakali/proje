@@ -1,6 +1,7 @@
 
 // Bu dosyanın adı: server.js
 // Render.com'un "Zaman Aşımı" hatasını çözen ve "Reddetme" sinyalini düzelten son versiyon.
+// 🔥 YENİ: Admin paneli istatistik özelliği eklendi.
 
 const { Server } = require("socket.io");
 const http = require('http'); 
@@ -54,7 +55,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 3. ARAMA KABUL EDİLDİ (Bu mantığı JS tarafında kaldırmıştık, o yüzden sunucuda kalsa da zararı yok)
+  // 3. ARAMA KABUL EDİLDİ (JS tarafında kullanılmıyor, ama zararı yok)
   socket.on("call_accepted", (data) => {
     const callerSocketId = kullaniciSoketleri.get(data.caller_id.toString());
     if (callerSocketId) {
@@ -65,15 +66,11 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 🔥 GÜNCELLEME: "Reddet" butonu için doğru sinyal adı
-  // 4. ARAMA REDDEDİLDİ
+  // 4. ARAMA REDDEDİLDİ (incoming_call.php ile uyumlu)
   socket.on("send_rejection", (data) => {
-    // incoming_call.php'den gelen veri: { receiver_id: ARAYANIN_IDSI }
     const callerSocketId = kullaniciSoketleri.get(data.receiver_id.toString());
-    
     if (callerSocketId) {
       console.log(`[RED] Arama reddedildi. ${data.receiver_id}'a (Arayana) bildiriliyor.`);
-      // Arayan'ın call_handler.js'ine 'call_was_rejected' sinyalini gönder
       io.to(callerSocketId).emit("call_was_rejected");
     } else {
       console.log(`[HATA] Red sinyali iletilemedi. Arayan (${data.receiver_id}) çevrimdışı.`);
@@ -100,7 +97,24 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 7. BAĞLANTI KOPMASI
+  // 🔥 GÜNCELLEME: ADMİN PANELİ İSTATİSTİK İSTEĞİ EKLENDİ
+  // 7. ADMİN PANELİ İSTATİSTİK İSTEĞİ
+  socket.on("admin_get_stats", (secret_key) => {
+    // Şifreyi kontrol et (Bu şifreyi panel/index.php'deki ile aynı yap)
+    if (secret_key === "CokGuvEnliSifre123") { 
+      
+      console.log("[ADMIN] İstatistik isteği alındı.");
+      // Admin'e o an bağlı olan soket sayısını (kullaniciSoketleri listesinin boyutu) gönder
+      socket.emit("admin_stats_response", { 
+        active_count: kullaniciSoketleri.size 
+      });
+      
+    } else {
+      console.warn("[ADMIN] YETKİSİZ İstatistik isteği denemesi!");
+    }
+  });
+
+  // 8. BAĞLANTI KOPMASI
   socket.on("disconnect", () => {
     console.log(`[BAĞLANTI KESİLDİ] Kullanıcı ayrıldı: ${socket.id}`);
     for (let [userId, sockId] of kullaniciSoketleri.entries()) {
