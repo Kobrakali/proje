@@ -1,41 +1,31 @@
 
 // Bu dosyanın adı: server.js
-// Render.com'un "Zaman Aşımı" hatasını çözen son versiyon.
+// Render.com'un "Zaman Aşımı" hatasını çözen ve "Reddetme" sinyalini düzelten son versiyon.
 
 const { Server } = require("socket.io");
-const http = require('http'); // Node.js'in kendi HTTP modülünü dahil et
+const http = require('http'); 
 
-// 1. Render'ın sağlık kontrolü (health check) için basit bir HTTP sunucusu oluştur
 const httpServer = http.createServer((req, res) => {
-  // Render "GET /" isteği attığında ona "OK" (200) cevabı ver
   if (req.method === 'GET' && req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Arama santrali (WebSocket) sunucusu aktif.');
   } else {
-    // Diğer tüm HTTP isteklerini reddet
     res.writeHead(404);
     res.end();
   }
 });
 
-// Render'ın bize verdiği portu (veya yerelde 3000'i) kullan
 const PORT = process.env.PORT || 3000;
-// 🔥 Render'ın istediği HOST adresi (Bu, zaman aşımını çözer)
 const HOST = process.env.HOST || '0.0.0.0';
 
-// 2. Socket.io'yu oluşturduğumuz HTTP sunucusuna bağla
 const io = new Server(httpServer, {
   cors: {
-    origin: "*", // Test için herkes (Daha sonra sitenin adını yazarsın)
+    origin: "*", // Test için herkes
     methods: ["GET", "POST"]
   }
 });
 
 console.log(`🚀 Hatasız Arama Sunucusu (Santral) ${PORT} portunda dinlemeye hazır...`);
-
-// =========================================================
-// (Aşağıdaki tüm Socket.io mantığı öncekiyle BİREBİR AYNI)
-// =========================================================
 
 let kullaniciSoketleri = new Map(); // key: userId, value: socket.id
 
@@ -50,7 +40,7 @@ io.on("connection", (socket) => {
     kullaniciSoketleri.set(userIdStr, socket.id);
   });
 
-  // 2. ARAMA İSTEĞİ (dm_room -> dm_room)
+  // 2. ARAMA İSTEĞİ (dm_room -> incoming_call)
   socket.on("request_call", (data) => {
     const receiverSocketId = kullaniciSoketleri.get(data.receiver_id.toString());
     if (receiverSocketId) {
@@ -64,7 +54,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 3. ARAMA KABUL EDİLDİ
+  // 3. ARAMA KABUL EDİLDİ (Bu mantığı JS tarafında kaldırmıştık, o yüzden sunucuda kalsa da zararı yok)
   socket.on("call_accepted", (data) => {
     const callerSocketId = kullaniciSoketleri.get(data.caller_id.toString());
     if (callerSocketId) {
@@ -75,14 +65,18 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 🔥 GÜNCELLEME: "Reddet" butonu için doğru sinyal adı
   // 4. ARAMA REDDEDİLDİ
-  socket.on("call_rejected", (data) => {
-    const callerSocketId = kullaniciSoketleri.get(data.caller_id.toString());
+  socket.on("send_rejection", (data) => {
+    // incoming_call.php'den gelen veri: { receiver_id: ARAYANIN_IDSI }
+    const callerSocketId = kullaniciSoketleri.get(data.receiver_id.toString());
+    
     if (callerSocketId) {
-      console.log(`[RED] ${data.receiver_id} aramayı reddetti.`);
-      io.to(callerSocketId).emit("call_was_rejected", {
-        receiver_id: data.receiver_id
-      });
+      console.log(`[RED] Arama reddedildi. ${data.receiver_id}'a (Arayana) bildiriliyor.`);
+      // Arayan'ın call_handler.js'ine 'call_was_rejected' sinyalini gönder
+      io.to(callerSocketId).emit("call_was_rejected");
+    } else {
+      console.log(`[HATA] Red sinyali iletilemedi. Arayan (${data.receiver_id}) çevrimdışı.`);
     }
   });
   
@@ -119,7 +113,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// 3. 🔥 GÜNCELLENEN KISIM: Sunucuyu '0.0.0.0' hostu ile başlat
+// 3. Sunucuyu '0.0.0.0' hostu ile başlat
 httpServer.listen(PORT, HOST, () => {
   console.log(`Sunucu ${PORT} portunda ${HOST} hostunda başarıyla başlatıldı.`);
 });
